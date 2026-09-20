@@ -1,7 +1,7 @@
 import { useSeason } from "../context/SeasonContext";
 
 export function LoadingScreen({ label = "Setting the grid" }: { label?: string }) {
-  const { loading, error } = useSeason();
+  const { error } = useSeason();
   if (error) {
     return (
       <div className="grid min-h-[70vh] place-items-center px-6 text-center">
@@ -12,7 +12,6 @@ export function LoadingScreen({ label = "Setting the grid" }: { label?: string }
       </div>
     );
   }
-  if (!loading) return null;
   return (
     <div className="grid min-h-[70vh] place-items-center px-6 text-center">
       <div>
