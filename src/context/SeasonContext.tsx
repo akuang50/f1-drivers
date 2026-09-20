@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { loadSeason } from "../lib/api";
+import { modelLedger, type Ledger } from "../lib/ledger";
 import { predictChampionship, predictRace } from "../lib/predictions";
 import type { ChampionshipForecast, PredictedOutcome, SeasonSnapshot } from "../types";
 
@@ -9,6 +10,7 @@ type SeasonState = {
   error: string | null;
   racePredictions: PredictedOutcome[];
   championship: ChampionshipForecast[];
+  ledger: Ledger | null;
 };
 
 const SeasonContext = createContext<SeasonState | null>(null);
@@ -43,10 +45,11 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
     () => (snapshot ? predictChampionship(snapshot) : []),
     [snapshot],
   );
+  const ledger = useMemo(() => (snapshot ? modelLedger(snapshot) : null), [snapshot]);
 
   const value = useMemo(
-    () => ({ snapshot, loading, error, racePredictions, championship }),
-    [snapshot, loading, error, racePredictions, championship],
+    () => ({ snapshot, loading, error, racePredictions, championship, ledger }),
+    [snapshot, loading, error, racePredictions, championship, ledger],
   );
 
   return <SeasonContext.Provider value={value}>{children}</SeasonContext.Provider>;

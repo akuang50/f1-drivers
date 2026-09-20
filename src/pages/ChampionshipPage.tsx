@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { PredictedTag } from "../components/PredictedTag";
 import { SeasonGate } from "../components/SeasonGate";
+import { WhatIf } from "../components/WhatIf";
 import { lastConstructor } from "../lib/api";
 import { remainingRaces } from "../lib/predictions";
 import { TEAM_SHORT } from "../lib/teams";
@@ -70,6 +71,10 @@ function ChampionshipInner() {
           </div>
         </section>
       )}
+
+      <div className="mb-16">
+        <WhatIf snapshot={snapshot} />
+      </div>
 
       <h2 className="font-serif text-3xl">Drivers — current vs predicted</h2>
       <div className="mt-6 overflow-x-auto">

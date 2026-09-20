@@ -4,7 +4,9 @@ import { PlaceBand } from "../components/Figures";
 import { PageHeader } from "../components/PageHeader";
 import { PredictedTag } from "../components/PredictedTag";
 import { SeasonGate } from "../components/SeasonGate";
+import { ShareActions } from "../components/ShareActions";
 import { fetchCircuitHistory } from "../lib/api";
+import { notebookForCircuit, type TrackNote } from "../lib/circuitNotebook";
 import { formatWhen, placeLabel } from "../lib/format";
 import { predictRace } from "../lib/predictions";
 import { CIRCUIT_NOTES } from "../lib/teams";
@@ -21,18 +23,24 @@ export function GrandPrixPage() {
 
 function GrandPrixInner() {
   const { round = "" } = useParams();
-  const { snapshot, racePredictions } = useSeason();
+  const { snapshot, racePredictions, ledger } = useSeason();
   const [circuitPreds, setCircuitPreds] = useState<PredictedOutcome[] | null>(null);
+  const [notes, setNotes] = useState<TrackNote[] | null>(null);
+  const [openNote, setOpenNote] = useState<string | null>(null);
 
   const race = snapshot?.races.find((row) => row.round === round);
   const completed = snapshot ? Number(round) <= snapshot.currentRound : false;
   const resultRace = snapshot?.resultsByRound.get(Number(round));
+  const verdict = ledger?.rounds.find((row) => String(row.round) === round);
 
   useEffect(() => {
-    if (!snapshot || !race || completed) return;
+    if (!snapshot || !race) return;
     let live = true;
-    const years = [String(Number(snapshot.season) - 1), String(Number(snapshot.season) - 2)];
+    const years = [0, 1, 2, 3, 4].map((i) => String(Number(snapshot.season) - i));
     fetchCircuitHistory(race.Circuit.circuitId, years).then((history) => {
+      if (!live) return;
+      const grid = new Set(snapshot.driverStandings.map((row) => row.Driver.driverId));
+      setNotes(notebookForCircuit(history, grid));
       const byDriver = new Map<string, ErgastResult[]>();
       for (const past of history) {
         for (const row of past.Results ?? []) {
@@ -41,7 +49,7 @@ function GrandPrixInner() {
           byDriver.set(row.Driver.driverId, list);
         }
       }
-      if (live) setCircuitPreds(predictRace(snapshot, race.Circuit.circuitId, byDriver));
+      if (!completed) setCircuitPreds(predictRace(snapshot, race.Circuit.circuitId, byDriver));
     });
     return () => {
       live = false;
@@ -56,6 +64,15 @@ function GrandPrixInner() {
     const d = 0.18;
     return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d}%2C${lat - d}%2C${lng + d}%2C${lat + d}&layer=mapnik&marker=${lat}%2C${lng}`;
   }, [race]);
+
+  const shareLines = predictions.slice(0, 10).map((row) => {
+    const driver = snapshot?.driverStandings.find((s) => s.Driver.driverId === row.driverId);
+    return {
+      place: row.predictedPlace,
+      name: driver?.Driver.familyName ?? row.driverId,
+      range: `${placeLabel(row.placeRange[0])}–${placeLabel(row.placeRange[1])}`,
+    };
+  });
 
   if (!snapshot || !race) {
     return (
@@ -93,26 +110,47 @@ function GrandPrixInner() {
             <>
               <p className="text-[11px] uppercase tracking-[0.24em] text-mute">Official classification</p>
               <ol className="mt-4">
-                {resultRace.Results.map((row) => (
-                  <li
-                    key={row.Driver.driverId}
-                    className="grid grid-cols-12 items-baseline gap-2 border-t border-line py-3"
-                  >
-                    <span className="col-span-2 font-display text-2xl">{placeLabel(Number(row.position))}</span>
-                    <Link to={`/drivers/${row.Driver.driverId}`} className="col-span-6 font-serif text-xl">
-                      {row.Driver.familyName}
-                    </Link>
-                    <span className="col-span-2 text-sm text-mute">{row.Constructor.name}</span>
-                    <span className="col-span-2 text-right text-sm">{row.points} pts</span>
-                  </li>
-                ))}
+                {resultRace.Results.map((row) => {
+                  const pred = verdict?.rows.find((r) => r.driverId === row.Driver.driverId);
+                  return (
+                    <li
+                      key={row.Driver.driverId}
+                      className="grid grid-cols-12 items-baseline gap-2 border-t border-line py-3"
+                    >
+                      <span className="col-span-2 font-display text-2xl">{placeLabel(Number(row.position))}</span>
+                      <Link to={`/drivers/${row.Driver.driverId}`} className="col-span-4 font-serif text-xl">
+                        {row.Driver.familyName}
+                      </Link>
+                      <span className="col-span-3 text-sm text-mute">{row.Constructor.name}</span>
+                      <span className="col-span-3 text-right text-[11px] uppercase tracking-[0.14em] text-amber">
+                        {pred
+                          ? `model ${placeLabel(pred.predicted)}${pred.delta === 0 ? " · hit" : pred.delta > 0 ? ` · +${pred.delta}` : ` · ${pred.delta}`}`
+                          : `${row.points} pts`}
+                      </span>
+                    </li>
+                  );
+                })}
               </ol>
+              {verdict && (
+                <p className="mt-6 text-sm text-mute">
+                  <PredictedTag className="mr-2 align-middle" />
+                  This race the model missed by {verdict.mae.toFixed(1)} places on average.
+                </p>
+              )}
             </>
           ) : (
             <>
-              <div className="mb-4 flex items-center gap-3">
-                <PredictedTag />
-                <p className="text-[11px] uppercase tracking-[0.24em] text-mute">Predicted finishing places</p>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <PredictedTag />
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-mute">Predicted finishing places</p>
+                </div>
+                <Link
+                  to={`/grands-prix/${race.round}/card`}
+                  className="text-[11px] uppercase tracking-[0.18em] text-amber"
+                >
+                  Share card →
+                </Link>
               </div>
               <ol>
                 {predictions.map((row) => {
@@ -138,10 +176,64 @@ function GrandPrixInner() {
                   );
                 })}
               </ol>
+              <div className="mt-8">
+                <ShareActions
+                  raceName={race.raceName}
+                  locality={race.Circuit.Location.locality}
+                  round={race.round}
+                  lines={shareLines}
+                />
+              </div>
             </>
           )}
         </div>
       </div>
+
+      <section className="mt-20">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-mute">Circuit notebook</p>
+        <h2 className="mt-2 font-serif text-4xl">Recent visits to this place.</h2>
+        <p className="mt-4 max-w-xl text-mute">
+          Current-grid drivers only, last five seasons at {race.Circuit.circuitName}. Average finish and how often they
+          failed to classify.
+        </p>
+        {!notes && <p className="mt-8 text-mute">Opening the archive…</p>}
+        {notes && notes.length === 0 && (
+          <p className="mt-8 text-mute">No current-grid driver has a recorded start here yet.</p>
+        )}
+        {notes && notes.length > 0 && (
+          <ol className="mt-10">
+            {notes.map((note) => {
+              const driver = snapshot.driverStandings.find((s) => s.Driver.driverId === note.driverId);
+              const open = openNote === note.driverId;
+              return (
+                <li key={note.driverId} className="border-t border-line">
+                  <button
+                    type="button"
+                    onClick={() => setOpenNote(open ? null : note.driverId)}
+                    className="grid w-full grid-cols-12 items-baseline gap-2 py-4 text-left"
+                  >
+                    <span className="col-span-4 font-serif text-2xl">{driver?.Driver.familyName ?? note.driverId}</span>
+                    <span className="col-span-3 text-sm text-mute">{note.visits.length} starts</span>
+                    <span className="col-span-3 text-sm">avg {note.avgFinish.toFixed(1)}</span>
+                    <span className="col-span-2 text-right text-[11px] uppercase tracking-[0.14em] text-mute">
+                      DNF {Math.round(note.dnfRate * 100)}%
+                    </span>
+                  </button>
+                  {open && (
+                    <ol className="mb-4 grid grid-cols-2 gap-2 pb-4 text-sm text-mute sm:grid-cols-4">
+                      {note.visits.slice(0, 8).map((visit) => (
+                        <li key={`${visit.season}-${visit.round}`}>
+                          {visit.season} · {visit.classified ? placeLabel(visit.position) : "DNF"}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }

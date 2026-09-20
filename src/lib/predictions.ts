@@ -31,10 +31,55 @@ function gaussian(rand: () => number) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function classifiedPosition(result: ErgastResult) {
+export function classifiedPosition(result: ErgastResult) {
   const n = Number(result.position);
   if (!Number.isFinite(n) || n <= 0) return 20;
   return n;
+}
+
+export function snapshotAsOf(snapshot: SeasonSnapshot, lastCompletedRound: number): SeasonSnapshot {
+  const resultsByRound = new Map(
+    [...snapshot.resultsByRound.entries()].filter(([round]) => round <= lastCompletedRound),
+  );
+  const sprintByRound = new Map(
+    [...snapshot.sprintByRound.entries()].filter(([round]) => round <= lastCompletedRound),
+  );
+
+  const ctorPts = new Map<string, { pts: number; wins: number; ctor: (typeof snapshot.constructorStandings)[0]["Constructor"] }>();
+  const add = (
+    constructor: (typeof snapshot.constructorStandings)[0]["Constructor"],
+    points: number,
+    win: boolean,
+  ) => {
+    const cur = ctorPts.get(constructor.constructorId) ?? { pts: 0, wins: 0, ctor: constructor };
+    cur.pts += points;
+    if (win) cur.wins += 1;
+    ctorPts.set(constructor.constructorId, cur);
+  };
+  for (const race of resultsByRound.values()) {
+    for (const res of race.Results ?? []) add(res.Constructor, Number(res.points), res.position === "1");
+  }
+  for (const race of sprintByRound.values()) {
+    for (const res of race.SprintResults ?? []) add(res.Constructor, Number(res.points), false);
+  }
+
+  const constructorStandings = [...ctorPts.values()]
+    .sort((a, b) => b.pts - a.pts)
+    .map((row, i) => ({
+      position: String(i + 1),
+      positionText: String(i + 1),
+      points: String(row.pts),
+      wins: String(row.wins),
+      Constructor: row.ctor,
+    }));
+
+  return {
+    ...snapshot,
+    currentRound: Math.max(0, lastCompletedRound),
+    resultsByRound,
+    sprintByRound,
+    constructorStandings: constructorStandings.length ? constructorStandings : snapshot.constructorStandings,
+  };
 }
 
 export function seasonStatsFor(snapshot: SeasonSnapshot, driverId: string): DriverSeasonStats {
@@ -153,6 +198,7 @@ export function predictRace(
   snapshot: SeasonSnapshot,
   circuitId?: string,
   historyByDriver?: Map<string, ErgastResult[]>,
+  sims = 900,
 ): PredictedOutcome[] {
   const scored = snapshot.driverStandings.map((standing) => {
     const history = circuitId ? historyByDriver?.get(standing.Driver.driverId) : undefined;
@@ -163,7 +209,6 @@ export function predictRace(
 
   const seed = Number(snapshot.season) * 1000 + snapshot.currentRound * 17 + (circuitId?.length ?? 0);
   const rand = mulberry32(seed);
-  const sims = 900;
   const placeHits = new Map<string, number[]>();
   for (const row of scored) placeHits.set(row.standing.Driver.driverId, []);
 
@@ -216,14 +261,23 @@ export function remainingMaxPoints(snapshot: SeasonSnapshot) {
   return racePts + sprintPts;
 }
 
-export function predictChampionship(snapshot: SeasonSnapshot): ChampionshipForecast[] {
+export type WhatIfConfig = {
+  dnfNext?: Record<string, number>;
+  sims?: number;
+};
+
+export function predictChampionship(
+  snapshot: SeasonSnapshot,
+  whatIf: WhatIfConfig = {},
+): ChampionshipForecast[] {
   const leftover = remainingRaces(snapshot);
   const remainingMax = remainingMaxPoints(snapshot);
   const base = predictRace(snapshot);
   const byId = new Map(base.map((row) => [row.driverId, row]));
   const seed = Number(snapshot.season) * 333 + snapshot.currentRound * 91;
   const rand = mulberry32(seed);
-  const sims = 1200;
+  const sims = whatIf.sims ?? 1200;
+  const dnfNext = whatIf.dnfNext ?? {};
   const titles = new Map<string, number>();
   const pointSums = new Map<string, number>();
   const placeSums = new Map<string, number>();
@@ -241,15 +295,22 @@ export function predictChampionship(snapshot: SeasonSnapshot): ChampionshipForec
         Number(standing.points),
       ]),
     );
-    for (const race of leftover) {
+    leftover.forEach((race, raceIndex) => {
       const street = STREET_CIRCUITS.has(race.Circuit.circuitId);
-      const noisy = snapshot.driverStandings.map((standing) => {
-        const pred = byId.get(standing.Driver.driverId);
-        return {
-          id: standing.Driver.driverId,
-          v: (pred?.expectedScore ?? 12) + gaussian(rand) * (street ? 2.6 : 1.8),
-        };
-      });
+      const parked = new Set(
+        snapshot.driverStandings
+          .map((standing) => standing.Driver.driverId)
+          .filter((id) => (dnfNext[id] ?? 0) > raceIndex),
+      );
+      const noisy = snapshot.driverStandings
+        .filter((standing) => !parked.has(standing.Driver.driverId))
+        .map((standing) => {
+          const pred = byId.get(standing.Driver.driverId);
+          return {
+            id: standing.Driver.driverId,
+            v: (pred?.expectedScore ?? 12) + gaussian(rand) * (street ? 2.6 : 1.8),
+          };
+        });
       noisy.sort((a, b) => a.v - b.v);
       noisy.forEach((row, idx) => {
         totals.set(row.id, (totals.get(row.id) ?? 0) + pointsForPlace(RACE_POINTS, idx + 1));
@@ -264,7 +325,7 @@ export function predictChampionship(snapshot: SeasonSnapshot): ChampionshipForec
           totals.set(row.id, (totals.get(row.id) ?? 0) + pointsForPlace(SPRINT_POINTS, idx + 1));
         });
       }
-    }
+    });
     const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
     titles.set(ranked[0][0], (titles.get(ranked[0][0]) ?? 0) + 1);
     ranked.forEach(([id, pts], idx) => {

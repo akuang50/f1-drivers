@@ -7,6 +7,7 @@ import { CalendarPage } from "./pages/CalendarPage";
 import { GrandPrixPage } from "./pages/GrandPrixPage";
 import { ChampionshipPage } from "./pages/ChampionshipPage";
 import { PredictionsPage } from "./pages/PredictionsPage";
+import { ShareCardPage } from "./pages/ShareCardPage";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/grid" element={<GridPage />} />
           <Route path="/drivers/:id" element={<DriverPage />} />
           <Route path="/grands-prix" element={<CalendarPage />} />
+          <Route path="/grands-prix/:round/card" element={<ShareCardPage />} />
           <Route path="/grands-prix/:round" element={<GrandPrixPage />} />
           <Route path="/championship" element={<ChampionshipPage />} />
           <Route path="/predictions" element={<PredictionsPage />} />

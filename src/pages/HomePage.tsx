@@ -8,6 +8,7 @@ import { lastConstructor } from "../lib/api";
 import { countdownParts, formatDate, placeLabel, raceTarget } from "../lib/format";
 import { lastRace, nextRace } from "../lib/predictions";
 import { TEAM_SHORT, teamColor } from "../lib/teams";
+import { ModelLedger } from "../components/ModelLedger";
 import { useSeason } from "../context/SeasonContext";
 
 export function HomePage() {
@@ -15,7 +16,7 @@ export function HomePage() {
 }
 
 function HomeInner() {
-  const { snapshot, racePredictions, championship } = useSeason();
+  const { snapshot, racePredictions, championship, ledger } = useSeason();
   if (!snapshot) return null;
 
   const leader = snapshot.driverStandings[0];
@@ -173,6 +174,12 @@ function HomeInner() {
           </p>
         )}
       </section>
+
+      {ledger && (
+        <section className="mx-auto max-w-[1200px] px-6 pb-16">
+          <ModelLedger ledger={ledger} snapshot={snapshot} compact />
+        </section>
+      )}
     </div>
   );
 }

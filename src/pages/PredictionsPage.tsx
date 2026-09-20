@@ -4,6 +4,7 @@ import { PageHeader } from "../components/PageHeader";
 import { PredictedTag } from "../components/PredictedTag";
 import { SeasonGate } from "../components/SeasonGate";
 import { placeLabel } from "../lib/format";
+import { ModelLedger } from "../components/ModelLedger";
 import { nextRace, remainingRaces } from "../lib/predictions";
 import { useSeason } from "../context/SeasonContext";
 
@@ -16,7 +17,7 @@ export function PredictionsPage() {
 }
 
 function PredictionsInner() {
-  const { snapshot, racePredictions, championship } = useSeason();
+  const { snapshot, racePredictions, championship, ledger } = useSeason();
   if (!snapshot) return null;
   const upcoming = nextRace(snapshot);
   const leftover = remainingRaces(snapshot);
@@ -50,12 +51,20 @@ function PredictionsInner() {
               </div>
               <h2 className="font-serif text-4xl">Predicted finishing places</h2>
             </div>
-            <Link
-              to={`/grands-prix/${upcoming.round}`}
-              className="text-[11px] uppercase tracking-[0.22em] text-amber"
-            >
-              Circuit page →
-            </Link>
+            <div className="flex flex-col items-end gap-2">
+              <Link
+                to={`/grands-prix/${upcoming.round}`}
+                className="text-[11px] uppercase tracking-[0.22em] text-amber"
+              >
+                Circuit page →
+              </Link>
+              <Link
+                to={`/grands-prix/${upcoming.round}/card`}
+                className="text-[11px] uppercase tracking-[0.22em] text-mute"
+              >
+                Share card
+              </Link>
+            </div>
           </div>
           <ol>
             {racePredictions.map((row) => {
@@ -111,6 +120,12 @@ function PredictionsInner() {
             })}
         </ol>
       </section>
+
+      {ledger && (
+        <section className="mt-20">
+          <ModelLedger ledger={ledger} snapshot={snapshot} />
+        </section>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { SeasonGate } from "../components/SeasonGate";
 import { fetchDriverCareerResults, fetchWorldTitles, lastConstructor } from "../lib/api";
 import { summarizeCareer } from "../lib/career";
 import { ageFrom, formatDate, placeLabel } from "../lib/format";
+import { teammateSplit } from "../lib/teammate";
 import { nextRace, remainingRaces, seasonStatsFor } from "../lib/predictions";
 import { TEAM_SHORT, teamColor } from "../lib/teams";
 import { useSeason } from "../context/SeasonContext";
@@ -62,6 +63,7 @@ function DriverInner() {
   const upcoming = nextRace(snapshot);
   const leftover = remainingRaces(snapshot).length;
   const name = `${standing.Driver.givenName} ${standing.Driver.familyName}`;
+  const split = teammateSplit(snapshot, id);
 
   return (
     <div>
@@ -123,6 +125,40 @@ function DriverInner() {
           <FormPulse form={stats.form} />
         </div>
       </section>
+
+      {split && (
+        <section className="border-y border-line">
+          <div className="mx-auto max-w-[1200px] px-6 py-16">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-mute">The other car</p>
+            <h2 className="mt-2 font-serif text-4xl">
+              Versus{" "}
+              <Link to={`/drivers/${split.teammate.Driver.driverId}`} className="italic">
+                {split.teammate.Driver.familyName}
+              </Link>
+            </h2>
+            <p className="mt-3 text-mute">
+              {split.weekends} shared weekends at {split.teamName} this season.
+            </p>
+            <div className="mt-10 grid gap-8 sm:grid-cols-3">
+              <SplitStat
+                label="Qualifying"
+                mine={`${split.qualiWon}–${split.qualiLost}`}
+                detail={`avg grid ${split.avgGrid.toFixed(1)} vs ${split.teammateAvgGrid.toFixed(1)}`}
+              />
+              <SplitStat
+                label="Race"
+                mine={`${split.raceWon}–${split.raceLost}`}
+                detail={`avg finish ${split.avgFinish.toFixed(1)} vs ${split.teammateAvgFinish.toFixed(1)}`}
+              />
+              <SplitStat
+                label="Points"
+                mine={`${split.points}–${split.teammatePoints}`}
+                detail="championship tally, same team"
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {prediction && upcoming && (
         <section className="border-y border-line">
@@ -208,6 +244,16 @@ function Chance({ label, value }: { label: string; value: number }) {
       <div className="mt-6 h-px bg-paper/10">
         <div className="h-px bg-amber" style={{ width: `${Math.round(value * 100)}%` }} />
       </div>
+    </div>
+  );
+}
+
+function SplitStat({ label, mine, detail }: { label: string; mine: string; detail: string }) {
+  return (
+    <div className="border-t border-line pt-4">
+      <p className="text-[10px] uppercase tracking-[0.22em] text-mute">{label}</p>
+      <p className="mt-2 font-display text-5xl leading-none">{mine}</p>
+      <p className="mt-2 text-sm text-mute">{detail}</p>
     </div>
   );
 }
